@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres-trops:
+    image: postgres:16-alpine
+    container_name: trops-db
+    environment:
+      POSTGRES_USER: trops_admin
+      POSTGRES_PASSWORD: trops_password
+      POSTGRES_DB: trops_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - trops-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  trops-data:
