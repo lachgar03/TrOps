@@ -35,7 +35,7 @@ public class Mission extends BaseEntity {
     // Calcul automatique du profit avant insertion ou mise à jour
     @PrePersist
     @PreUpdate
-    private void calculateProfit() {
+    protected void calculateProfit() {
         if (revenues != null && costs != null) {
             this.profit = revenues.subtract(costs);
         }
