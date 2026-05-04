@@ -17,4 +17,6 @@ public interface MissionRepository extends JpaRepository<Mission, UUID> {
 
     @EntityGraph(attributePaths = {"vehicle", "client"})
     List<Mission> findAllByCompanyId(UUID companyId);
+
+    List<Mission> findAllByVehicleIdAndCompanyId(UUID vehicleId, UUID companyId);
 }

@@ -16,6 +16,15 @@ public class Vehicle extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String registrationNumber;
 
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'Unknown'")
+    private String brand;
+
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'Unknown'")
+    private String model;
+
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private Integer currentMileage;
+
     @Column(nullable = false)
     private boolean isUnderMaintenance = false;
 }

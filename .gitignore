@@ -31,3 +31,6 @@ build/
 
 ### VS Code ###
 .vscode/
+specification.md
+rules.md
+TrOps_Postman_Collection.json

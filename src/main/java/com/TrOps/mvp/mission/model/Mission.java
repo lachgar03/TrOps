@@ -33,7 +33,7 @@ public class Mission extends BaseEntity {
     private BigDecimal profit;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'PLANNED'")
     private MissionStatus status = MissionStatus.PLANNED;
 
     @Enumerated(EnumType.STRING)

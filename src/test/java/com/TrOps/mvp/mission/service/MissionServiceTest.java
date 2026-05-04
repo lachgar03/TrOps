@@ -19,7 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.lang.reflect.Method;
+
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +27,11 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+
+import com.TrOps.mvp.common.exception.BusinessRuleException;
+import com.TrOps.mvp.mission.model.ProfitabilityScore;
+import com.TrOps.mvp.mission.service.strategy.ProfitabilityResult;
+import com.TrOps.mvp.mission.service.strategy.ProfitabilityStrategy;
 
 @ExtendWith(MockitoExtension.class)
 class MissionServiceTest {
@@ -39,6 +44,9 @@ class MissionServiceTest {
 
     @Mock
     private ClientRepository clientRepository;
+
+    @Mock
+    private ProfitabilityStrategy profitabilityStrategy;
 
     @InjectMocks
     private MissionService missionService;
@@ -85,15 +93,13 @@ class MissionServiceTest {
         when(vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)).thenReturn(Optional.of(vehicle));
         when(clientRepository.findByIdAndCompanyId(clientId, companyId)).thenReturn(Optional.of(client));
 
-        // Simuler le comportement de JPA (@PrePersist) lors du save
-        when(missionRepository.save(any(Mission.class))).thenAnswer(invocation -> {
+        // Mock strategy
+        when(profitabilityStrategy.calculate(new BigDecimal("1000.00"), new BigDecimal("300.00")))
+                .thenReturn(new ProfitabilityResult(new BigDecimal("700.00"), new BigDecimal("0.70"), ProfitabilityScore.PROFITABLE));
+
+        // Simuler le comportement de saveAndFlush
+        when(missionRepository.saveAndFlush(any(Mission.class))).thenAnswer(invocation -> {
             Mission mission = invocation.getArgument(0);
-            
-            // Appel de la méthode privée calculateProfit via réflexion
-            Method calculateProfitMethod = Mission.class.getDeclaredMethod("calculateProfit");
-            calculateProfitMethod.setAccessible(true);
-            calculateProfitMethod.invoke(mission);
-            
             mission.setId(UUID.randomUUID());
             return mission;
         });
@@ -103,9 +109,8 @@ class MissionServiceTest {
 
         // Assert
         assertNotNull(response);
-        // Profit attendu : 1000 - 300 = 700
         assertEquals(new BigDecimal("700.00"), response.profit());
-        verify(missionRepository, times(1)).save(any(Mission.class));
+        verify(missionRepository, times(1)).saveAndFlush(any(Mission.class));
     }
 
     @Test
@@ -125,7 +130,7 @@ class MissionServiceTest {
         when(vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)).thenReturn(Optional.of(vehicle));
 
         // Act & Assert
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+        BusinessRuleException exception = assertThrows(BusinessRuleException.class, () -> {
             missionService.createMission(request);
         });
 
