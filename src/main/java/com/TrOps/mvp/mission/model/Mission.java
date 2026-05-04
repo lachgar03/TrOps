@@ -32,12 +32,14 @@ public class Mission extends BaseEntity {
     @Column(nullable = false)
     private BigDecimal profit;
 
-    // Calcul automatique du profit avant insertion ou mise à jour
-    @PrePersist
-    @PreUpdate
-    protected void calculateProfit() {
-        if (revenues != null && costs != null) {
-            this.profit = revenues.subtract(costs);
-        }
-    }
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MissionStatus status = MissionStatus.PLANNED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "profitability_score")
+    private ProfitabilityScore profitabilityScore;
+
+    @Column(name = "profit_margin", precision = 10, scale = 4)
+    private BigDecimal profitMargin;
 }

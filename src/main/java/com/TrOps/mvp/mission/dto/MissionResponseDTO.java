@@ -13,5 +13,8 @@ public record MissionResponseDTO(
         BigDecimal revenues,
         BigDecimal costs,
         BigDecimal profit,
+        String status,
+        BigDecimal profitMargin,
+        String profitabilityScore,
         LocalDateTime createdAt
 ) {}
