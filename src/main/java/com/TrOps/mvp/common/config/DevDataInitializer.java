@@ -7,9 +7,11 @@ import com.TrOps.mvp.vehicle.model.Vehicle;
 import com.TrOps.mvp.vehicle.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
+@Profile("dev")
 @RequiredArgsConstructor
 public class DevDataInitializer implements CommandLineRunner {
 

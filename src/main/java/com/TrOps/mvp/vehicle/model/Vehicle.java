@@ -4,16 +4,23 @@ import com.TrOps.mvp.common.model.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "vehicles")
+@Table(
+        name = "vehicles",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_vehicle_registration_company",
+                columnNames = {"registration_number", "company_id"}
+        )
+)
 @Getter
 @Setter
 public class Vehicle extends BaseEntity {
 
-    @Column(nullable = false, unique = true)
+    @Column(name = "registration_number", nullable = false)
     private String registrationNumber;
 
     @Column(nullable = false, columnDefinition = "varchar(255) default 'Unknown'")
@@ -28,3 +35,4 @@ public class Vehicle extends BaseEntity {
     @Column(nullable = false)
     private boolean isUnderMaintenance = false;
 }
+

@@ -15,4 +15,10 @@ public class Client extends BaseEntity {
 
     @Column(nullable = false)
     private String name;
+
+    @Column
+    private String email;
+
+    @Column
+    private String phone;
 }

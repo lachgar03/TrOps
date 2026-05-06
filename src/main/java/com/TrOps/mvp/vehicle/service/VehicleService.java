@@ -1,8 +1,8 @@
 package com.TrOps.mvp.vehicle.service;
 
 import com.TrOps.mvp.common.exception.ResourceNotFoundException;
-import com.TrOps.mvp.mission.model.Mission;
-import com.TrOps.mvp.mission.repository.MissionRepository;
+import com.TrOps.mvp.mission.dto.MissionSummaryDTO;
+import com.TrOps.mvp.mission.service.MissionQueryService;
 import com.TrOps.mvp.user.model.User;
 import com.TrOps.mvp.vehicle.dto.VehicleFinancialSummaryDTO;
 import com.TrOps.mvp.vehicle.dto.VehicleRequestDTO;
@@ -10,6 +10,8 @@ import com.TrOps.mvp.vehicle.dto.VehicleResponseDTO;
 import com.TrOps.mvp.vehicle.model.Vehicle;
 import com.TrOps.mvp.vehicle.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +26,7 @@ import java.util.stream.Collectors;
 public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
-    private final MissionRepository missionRepository;
+    private final MissionQueryService missionQueryService;
 
     @Transactional
     public VehicleResponseDTO createVehicle(VehicleRequestDTO request) {
@@ -39,15 +40,13 @@ public class VehicleService {
         vehicle.setCurrentMileage(request.currentMileage());
         vehicle.setUnderMaintenance(false);
 
-        Vehicle savedVehicle = vehicleRepository.save(vehicle);
-        return mapToResponseDTO(savedVehicle);
+        return mapToResponseDTO(vehicleRepository.save(vehicle));
     }
 
-    public List<VehicleResponseDTO> getAllVehicles() {
+    public Page<VehicleResponseDTO> getAllVehicles(Pageable pageable) {
         UUID companyId = getCurrentCompanyId();
-        return vehicleRepository.findAllByCompanyId(companyId).stream()
-                .map(this::mapToResponseDTO)
-                .collect(Collectors.toList());
+        return vehicleRepository.findAllByCompanyId(companyId, pageable)
+                .map(this::mapToResponseDTO);
     }
 
     public VehicleResponseDTO getVehicleById(UUID id) {
@@ -59,25 +58,23 @@ public class VehicleService {
 
     public VehicleFinancialSummaryDTO getVehicleFinancialSummary(UUID id) {
         UUID companyId = getCurrentCompanyId();
-        
-        // Ensure vehicle exists
+
         Vehicle vehicle = vehicleRepository.findByIdAndCompanyId(id, companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable"));
 
-        // Retrieve all missions for this vehicle
-        List<Mission> missions = missionRepository.findAllByVehicleIdAndCompanyId(id, companyId);
+        // Use MissionQueryService — no direct cross-module repository access
+        List<MissionSummaryDTO> missions = missionQueryService.getMissionsByVehicle(id, companyId);
 
-        // Aggregate financial data
         BigDecimal totalRevenues = missions.stream()
-                .map(Mission::getRevenues)
+                .map(MissionSummaryDTO::revenues)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalCosts = missions.stream()
-                .map(Mission::getCosts)
+                .map(MissionSummaryDTO::costs)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal totalProfit = missions.stream()
-                .map(Mission::getProfit)
+                .map(MissionSummaryDTO::profit)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return new VehicleFinancialSummaryDTO(
@@ -87,6 +84,16 @@ public class VehicleService {
                 totalCosts,
                 totalProfit
         );
+    }
+
+    /**
+     * Package-accessible method used by MissionService to resolve a vehicle
+     * by ID within the correct tenant scope, without MissionService accessing
+     * VehicleRepository directly.
+     */
+    public Vehicle resolveVehicle(UUID vehicleId, UUID companyId) {
+        return vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable pour cette entreprise"));
     }
 
     private UUID getCurrentCompanyId() {
@@ -107,3 +114,4 @@ public class VehicleService {
         );
     }
 }
+

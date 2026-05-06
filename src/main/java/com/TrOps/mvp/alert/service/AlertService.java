@@ -9,13 +9,13 @@ import com.TrOps.mvp.alert.repository.AlertRepository;
 import com.TrOps.mvp.common.exception.ResourceNotFoundException;
 import com.TrOps.mvp.user.model.User;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +25,8 @@ public class AlertService {
     private final AlertRepository alertRepository;
 
     @Transactional
-    public void createAlert(UUID companyId, AlertType type, AlertLevel level, String title, String description, String referenceId) {
+    public void createAlert(UUID companyId, AlertType type, AlertLevel level,
+                            String title, String description, String referenceId) {
         Alert alert = new Alert();
         alert.setCompanyId(companyId);
         alert.setType(type);
@@ -38,23 +39,20 @@ public class AlertService {
         alertRepository.save(alert);
     }
 
-    public List<AlertResponseDTO> getActiveAlerts() {
+    public Page<AlertResponseDTO> getActiveAlerts(Pageable pageable) {
         UUID companyId = getCurrentCompanyId();
-        return alertRepository.findAllByCompanyIdAndStatusOrderByCreatedAtDesc(companyId, AlertStatus.ACTIVE)
-                .stream()
-                .map(this::mapToDTO)
-                .collect(Collectors.toList());
+        return alertRepository.findAllByCompanyIdAndStatusOrderByCreatedAtDesc(
+                        companyId, AlertStatus.ACTIVE, pageable)
+                .map(this::mapToDTO);
     }
 
     @Transactional
     public void resolveAlert(UUID alertId) {
         UUID companyId = getCurrentCompanyId();
-        Alert alert = alertRepository.findById(alertId)
-                .orElseThrow(() -> new ResourceNotFoundException("Alerte introuvable"));
 
-        if (!alert.getCompanyId().equals(companyId)) {
-            throw new ResourceNotFoundException("Alerte introuvable pour cette entreprise");
-        }
+        // Single secure query: avoids IDOR by filtering on companyId directly
+        Alert alert = alertRepository.findByIdAndCompanyId(alertId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Alerte introuvable pour cette entreprise"));
 
         alert.setStatus(AlertStatus.RESOLVED);
         alertRepository.save(alert);
@@ -78,3 +76,4 @@ public class AlertService {
         );
     }
 }
+
