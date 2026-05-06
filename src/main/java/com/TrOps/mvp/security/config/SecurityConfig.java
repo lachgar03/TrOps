@@ -49,7 +49,7 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
 
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(List.of("http://localhost:5173")); // Origine Front
+        config.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:5174")); // Origines Front (Vite)
         config.setAllowedHeaders(List.of("*")); // Tous les headers
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")); // OPTIONS est crucial pour le Preflight
 

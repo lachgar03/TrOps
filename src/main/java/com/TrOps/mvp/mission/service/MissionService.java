@@ -15,7 +15,7 @@ import com.TrOps.mvp.mission.service.strategy.ProfitabilityResult;
 import com.TrOps.mvp.mission.service.strategy.ProfitabilityStrategy;
 import com.TrOps.mvp.user.model.User;
 import com.TrOps.mvp.vehicle.model.Vehicle;
-import com.TrOps.mvp.vehicle.service.VehicleService;
+import com.TrOps.mvp.vehicle.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,7 +33,7 @@ import java.util.UUID;
 public class MissionService implements MissionQueryService {
 
     private final MissionRepository missionRepository;
-    private final VehicleService vehicleService;
+    private final VehicleRepository vehicleRepository;
     private final ClientService clientService;
     private final ProfitabilityStrategy profitabilityStrategy;
 
@@ -45,8 +45,9 @@ public class MissionService implements MissionQueryService {
     public MissionResponseDTO createMission(MissionRequestDTO request) {
         UUID companyId = getCurrentCompanyId();
 
-        // 1. Resolve Vehicle through VehicleService (no cross-module repo access)
-        Vehicle vehicle = vehicleService.resolveVehicle(request.vehicleId(), companyId);
+        // 1. Resolve Vehicle directly via VehicleRepository (avoids circular dependency with VehicleService)
+        Vehicle vehicle = vehicleRepository.findByIdAndCompanyId(request.vehicleId(), companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable pour cette entreprise"));
 
         if (vehicle.isUnderMaintenance()) {
             throw new BusinessRuleException("Impossible d'assigner la mission : Le véhicule est en maintenance");
