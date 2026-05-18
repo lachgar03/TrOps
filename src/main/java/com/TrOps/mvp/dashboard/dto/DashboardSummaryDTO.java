@@ -8,7 +8,12 @@ public record DashboardSummaryDTO(
         BigDecimal totalRevenue,
         BigDecimal totalCosts,
         BigDecimal netProfit,
-        long totalMissions,
+
+        // Compteurs
+        long activeMissions,
+        long totalVehicles,
+        long vehiclesUnderMaintenance,
+        long totalClients,
         long missionsAtLossCount,
 
         // Insights
@@ -20,15 +25,17 @@ public record DashboardSummaryDTO(
     public record VehicleInsightDTO(
             String vehicleId,
             String registrationNumber,
-            BigDecimal totalRevenue,
-            BigDecimal netProfit
+            BigDecimal totalRevenues,
+            BigDecimal totalCosts,
+            BigDecimal totalProfit
     ) {}
 
     public record ClientInsightDTO(
             String clientId,
             String clientName,
-            long totalMissions,
-            BigDecimal totalRevenue
+            BigDecimal totalRevenues,
+            BigDecimal totalCosts,
+            BigDecimal totalProfit
     ) {}
 
     public record MissionAtLossDTO(
@@ -37,6 +44,7 @@ public record DashboardSummaryDTO(
             String clientName,
             BigDecimal revenues,
             BigDecimal costs,
-            BigDecimal profit
+            BigDecimal profit,
+            BigDecimal profitMargin
     ) {}
 }

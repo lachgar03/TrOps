@@ -6,13 +6,15 @@ import com.TrOps.mvp.common.exception.BusinessRuleException;
 import com.TrOps.mvp.mission.dto.MissionRequestDTO;
 import com.TrOps.mvp.mission.dto.MissionResponseDTO;
 import com.TrOps.mvp.mission.model.Mission;
+import com.TrOps.mvp.mission.model.MissionStatus;
 import com.TrOps.mvp.mission.model.ProfitabilityScore;
 import com.TrOps.mvp.mission.repository.MissionRepository;
 import com.TrOps.mvp.mission.service.strategy.ProfitabilityResult;
 import com.TrOps.mvp.mission.service.strategy.ProfitabilityStrategy;
+import com.TrOps.mvp.user.model.Role;
 import com.TrOps.mvp.user.model.User;
 import com.TrOps.mvp.vehicle.model.Vehicle;
-import com.TrOps.mvp.vehicle.service.VehicleService;
+import com.TrOps.mvp.vehicle.repository.VehicleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,13 +34,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class MissionServiceTest {
+public class MissionServiceTest {
 
     @Mock
     private MissionRepository missionRepository;
 
     @Mock
-    private VehicleService vehicleService;
+    private VehicleRepository vehicleRepository;
 
     @Mock
     private ClientService clientService;
@@ -49,54 +51,62 @@ class MissionServiceTest {
     @InjectMocks
     private MissionService missionService;
 
-    private final UUID companyId = UUID.randomUUID();
-    private final UUID vehicleId = UUID.randomUUID();
-    private final UUID clientId  = UUID.randomUUID();
+    private UUID companyId;
+    private UUID vehicleId;
+    private UUID clientId;
+    private User currentUser;
 
     @BeforeEach
     void setUp() {
-        SecurityContext securityContext = mock(SecurityContext.class);
-        Authentication authentication  = mock(Authentication.class);
-        User mockUser = new User();
-        mockUser.setCompanyId(companyId);
+        companyId = UUID.randomUUID();
+        vehicleId = UUID.randomUUID();
+        clientId = UUID.randomUUID();
 
+        // Mock SecurityContext
+        currentUser = new User();
+        currentUser.setId(UUID.randomUUID());
+        currentUser.setCompanyId(companyId);
+        currentUser.setEmail("test@ops.com");
+        currentUser.setRole(Role.MANAGER);
+
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getPrincipal()).thenReturn(currentUser);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
         SecurityContextHolder.setContext(securityContext);
-        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
-        lenient().when(authentication.getPrincipal()).thenReturn(mockUser);
     }
 
     @Test
-    void devrraitCalculerLeProfitCorrectementLorsDeLaCreation() {
+    void shouldCalculateProfitCorrectlyWhenRevenuesAndCostsAreProvided() {
         // Arrange
-        MissionRequestDTO request = new MissionRequestDTO(
-                vehicleId, clientId,
-                new BigDecimal("1000.00"),
-                new BigDecimal("300.00")
-        );
+        BigDecimal revenues = new BigDecimal("1500.00");
+        BigDecimal costs = new BigDecimal("1000.00");
+        BigDecimal expectedProfit = revenues.subtract(costs); // 500.00
+
+        MissionRequestDTO request = new MissionRequestDTO(vehicleId, clientId, revenues, costs);
 
         Vehicle vehicle = new Vehicle();
         vehicle.setId(vehicleId);
-        vehicle.setRegistrationNumber("AB-123-CD");
+        vehicle.setCompanyId(companyId);
         vehicle.setUnderMaintenance(false);
+        vehicle.setRegistrationNumber("AB-123-CD");
 
         Client client = new Client();
         client.setId(clientId);
+        client.setCompanyId(companyId);
         client.setName("Client Test");
 
-        // Mock service calls (no repository access)
-        when(vehicleService.resolveVehicle(vehicleId, companyId)).thenReturn(vehicle);
+        when(vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)).thenReturn(Optional.of(vehicle));
         when(clientService.resolveClient(clientId, companyId)).thenReturn(client);
-
-        when(profitabilityStrategy.calculate(new BigDecimal("1000.00"), new BigDecimal("300.00")))
-                .thenReturn(new ProfitabilityResult(
-                        new BigDecimal("700.00"),
-                        new BigDecimal("0.70"),
-                        ProfitabilityScore.PROFITABLE));
-
+        when(profitabilityStrategy.calculate(revenues, costs))
+                .thenReturn(new ProfitabilityResult(expectedProfit, new BigDecimal("0.33"), ProfitabilityScore.PROFITABLE));
+        
         when(missionRepository.saveAndFlush(any(Mission.class))).thenAnswer(invocation -> {
-            Mission m = invocation.getArgument(0);
-            m.setId(UUID.randomUUID());
-            return m;
+            Mission savedMission = invocation.getArgument(0);
+            savedMission.setId(UUID.randomUUID());
+            savedMission.setStatus(MissionStatus.PLANNED);
+            return savedMission;
         });
 
         // Act
@@ -104,32 +114,35 @@ class MissionServiceTest {
 
         // Assert
         assertNotNull(response);
-        assertEquals(new BigDecimal("700.00"), response.profit());
+        assertEquals(expectedProfit, response.profit());
+        verify(profitabilityStrategy, times(1)).calculate(revenues, costs);
         verify(missionRepository, times(1)).saveAndFlush(any(Mission.class));
     }
 
     @Test
-    void devraitLancerUneExceptionSiLeVehiculeEstEnMaintenance() {
+    void shouldThrowBusinessRuleExceptionWhenVehicleIsUnderMaintenance() {
         // Arrange
-        MissionRequestDTO request = new MissionRequestDTO(
-                vehicleId, clientId,
-                new BigDecimal("1000.00"),
-                new BigDecimal("300.00")
-        );
+        BigDecimal revenues = new BigDecimal("1500.00");
+        BigDecimal costs = new BigDecimal("1000.00");
+        
+        MissionRequestDTO request = new MissionRequestDTO(vehicleId, clientId, revenues, costs);
 
         Vehicle vehicle = new Vehicle();
         vehicle.setId(vehicleId);
-        vehicle.setUnderMaintenance(true);
+        vehicle.setCompanyId(companyId);
+        vehicle.setUnderMaintenance(true); // Véhicule en maintenance !
 
-        when(vehicleService.resolveVehicle(vehicleId, companyId)).thenReturn(vehicle);
+        when(vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)).thenReturn(Optional.of(vehicle));
 
         // Act & Assert
-        BusinessRuleException exception = assertThrows(BusinessRuleException.class,
-                () -> missionService.createMission(request));
+        BusinessRuleException exception = assertThrows(BusinessRuleException.class, () -> {
+            missionService.createMission(request);
+        });
 
-        assertEquals("Impossible d'assigner la mission : Le véhicule est en maintenance",
-                exception.getMessage());
-        verify(missionRepository, never()).save(any(Mission.class));
+        assertEquals("Impossible d'assigner la mission : Le véhicule est en maintenance", exception.getMessage());
+        
+        // Vérifier que la mission n'a pas été sauvegardée et que le client n'a pas été cherché
+        verify(clientService, never()).resolveClient(any(), any());
+        verify(missionRepository, never()).saveAndFlush(any());
     }
 }
-

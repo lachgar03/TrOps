@@ -5,10 +5,10 @@ import com.TrOps.mvp.client.repository.ClientRepository;
 import com.TrOps.mvp.dashboard.dto.DashboardSummaryDTO;
 import com.TrOps.mvp.dashboard.dto.DashboardSummaryDTO.*;
 import com.TrOps.mvp.mission.model.Mission;
+import com.TrOps.mvp.mission.model.MissionStatus;
 import com.TrOps.mvp.mission.model.ProfitabilityScore;
 import com.TrOps.mvp.mission.repository.MissionRepository;
 import com.TrOps.mvp.user.model.User;
-import com.TrOps.mvp.vehicle.model.Vehicle;
 import com.TrOps.mvp.vehicle.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,12 @@ public class DashboardService {
         BigDecimal totalRevenue = missionRepository.sumRevenuesByCompanyId(companyId);
         BigDecimal totalCosts   = missionRepository.sumCostsByCompanyId(companyId);
         BigDecimal netProfit    = missionRepository.sumProfitByCompanyId(companyId);
-        long totalMissions      = missionRepository.countByCompanyId(companyId);
+
+        // --- Count KPIs ---
+        long activeMissions = missionRepository.countByCompanyId(companyId);
+        long totalVehicles  = vehicleRepository.countByCompanyId(companyId);
+        long vehiclesUnderMaintenance = vehicleRepository.countByCompanyIdAndIsUnderMaintenance(companyId, true);
+        long totalClients   = clientRepository.findAllByCompanyId(companyId).size();
         long missionsAtLossCount = missionRepository.countByCompanyIdAndProfitabilityScore(
                 companyId, ProfitabilityScore.LOSS);
 
@@ -53,21 +59,25 @@ public class DashboardService {
                         m.getClient().getName(),
                         m.getRevenues(),
                         m.getCosts(),
-                        m.getProfit()
+                        m.getProfit(),
+                        m.getProfitMargin()
                 ))
                 .toList();
 
-        // --- Top vehicles by revenue (all missions aggregated per vehicle) ---
+        // --- Top vehicles by profit ---
         List<VehicleInsightDTO> topVehicles = buildTopVehicles(companyId);
 
-        // --- Top clients by total revenue ---
+        // --- Top clients by profit ---
         List<ClientInsightDTO> topClients = buildTopClients(companyId);
 
         return new DashboardSummaryDTO(
                 totalRevenue,
                 totalCosts,
                 netProfit,
-                totalMissions,
+                activeMissions,
+                totalVehicles,
+                vehiclesUnderMaintenance,
+                totalClients,
                 missionsAtLossCount,
                 topVehicles,
                 topClients,
@@ -80,7 +90,6 @@ public class DashboardService {
     // -------------------------------------------------------------------------
 
     private List<VehicleInsightDTO> buildTopVehicles(UUID companyId) {
-        // Load all missions with @EntityGraph to avoid N+1, then group by vehicle
         List<Mission> allMissions = missionRepository
                 .findAllByCompanyId(companyId, PageRequest.of(0, 5000))
                 .getContent();
@@ -92,20 +101,24 @@ public class DashboardService {
                 .map(entry -> {
                     List<Mission> vMissions = entry.getValue();
                     String regNumber = vMissions.get(0).getVehicle().getRegistrationNumber();
-                    BigDecimal revenue = vMissions.stream()
+                    BigDecimal totalRevenues = vMissions.stream()
                             .map(Mission::getRevenues)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    BigDecimal profit = vMissions.stream()
+                    BigDecimal totalCosts = vMissions.stream()
+                            .map(Mission::getCosts)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalProfit = vMissions.stream()
                             .map(Mission::getProfit)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     return new VehicleInsightDTO(
                             entry.getKey().toString(),
                             regNumber,
-                            revenue,
-                            profit
+                            totalRevenues,
+                            totalCosts,
+                            totalProfit
                     );
                 })
-                .sorted(Comparator.comparing(VehicleInsightDTO::totalRevenue).reversed())
+                .sorted(Comparator.comparing(VehicleInsightDTO::totalProfit).reversed())
                 .limit(5)
                 .toList();
     }
@@ -122,17 +135,24 @@ public class DashboardService {
         return clients.stream()
                 .map(c -> {
                     List<Mission> cMissions = missionsByClient.getOrDefault(c.getId(), List.of());
-                    BigDecimal revenue = cMissions.stream()
+                    BigDecimal totalRevenues = cMissions.stream()
                             .map(Mission::getRevenues)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalCosts = cMissions.stream()
+                            .map(Mission::getCosts)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalProfit = cMissions.stream()
+                            .map(Mission::getProfit)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     return new ClientInsightDTO(
                             c.getId().toString(),
                             c.getName(),
-                            cMissions.size(),
-                            revenue
+                            totalRevenues,
+                            totalCosts,
+                            totalProfit
                     );
                 })
-                .sorted(Comparator.comparing(ClientInsightDTO::totalRevenue).reversed())
+                .sorted(Comparator.comparing(ClientInsightDTO::totalProfit).reversed())
                 .limit(5)
                 .toList();
     }

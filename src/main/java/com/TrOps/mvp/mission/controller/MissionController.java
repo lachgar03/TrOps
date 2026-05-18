@@ -14,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -24,6 +25,7 @@ import java.util.UUID;
 @RequestMapping("/api/v1/missions")
 @RequiredArgsConstructor
 @Tag(name = "Missions", description = "Gestion des missions de transport")
+@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
 public class MissionController {
 
     private final MissionService missionService;
@@ -41,6 +43,7 @@ public class MissionController {
 
     @GetMapping
     @Operation(summary = "Lister toutes les missions (paginé, filtrable par statut)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public ResponseEntity<Page<MissionResponseDTO>> getAllMissions(
             @RequestParam(required = false) MissionStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -52,6 +55,7 @@ public class MissionController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Récupérer une mission par ID")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'OPERATOR')")
     public ResponseEntity<MissionResponseDTO> getMissionById(@PathVariable UUID id) {
         return ResponseEntity.ok(missionService.getMissionById(id));
     }

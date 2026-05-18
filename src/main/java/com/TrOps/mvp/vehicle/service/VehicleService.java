@@ -4,10 +4,13 @@ import com.TrOps.mvp.common.exception.ResourceNotFoundException;
 import com.TrOps.mvp.mission.dto.MissionSummaryDTO;
 import com.TrOps.mvp.mission.service.MissionQueryService;
 import com.TrOps.mvp.user.model.User;
+import com.TrOps.mvp.vehicle.dto.DocumentRequestDTO;
+import com.TrOps.mvp.vehicle.dto.DocumentResponseDTO;
 import com.TrOps.mvp.vehicle.dto.VehicleFinancialSummaryDTO;
 import com.TrOps.mvp.vehicle.dto.VehicleRequestDTO;
 import com.TrOps.mvp.vehicle.dto.VehicleResponseDTO;
-import com.TrOps.mvp.vehicle.model.Vehicle;
+import com.TrOps.mvp.vehicle.model.*;
+import com.TrOps.mvp.vehicle.repository.VehicleDocumentRepository;
 import com.TrOps.mvp.vehicle.repository.VehicleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,6 +29,7 @@ import java.util.UUID;
 public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
+    private final VehicleDocumentRepository vehicleDocumentRepository;
     private final MissionQueryService missionQueryService;
 
     @Transactional
@@ -62,7 +66,6 @@ public class VehicleService {
         Vehicle vehicle = vehicleRepository.findByIdAndCompanyId(id, companyId)
                 .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable"));
 
-        // Use MissionQueryService — no direct cross-module repository access
         List<MissionSummaryDTO> missions = missionQueryService.getMissionsByVehicle(id, companyId);
 
         BigDecimal totalRevenues = missions.stream()
@@ -86,10 +89,65 @@ public class VehicleService {
         );
     }
 
+    // ---- Document Management ----
+
+    public List<DocumentResponseDTO> getDocumentsByVehicle(UUID vehicleId) {
+        UUID companyId = getCurrentCompanyId();
+        vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable"));
+
+        return vehicleDocumentRepository.findAllByVehicleIdAndCompanyId(vehicleId, companyId)
+                .stream()
+                .map(this::mapDocToDTO)
+                .toList();
+    }
+
+    @Transactional
+    public DocumentResponseDTO addDocument(UUID vehicleId, DocumentRequestDTO request) {
+        UUID companyId = getCurrentCompanyId();
+        Vehicle vehicle = vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable"));
+
+        VehicleDocument doc = switch (request.documentType()) {
+            case INSURANCE -> {
+                InsuranceDocument ins = new InsuranceDocument();
+                ins.setPolicyNumber(request.documentNumber());
+                yield ins;
+            }
+            case REGISTRATION -> {
+                RegistrationDocument reg = new RegistrationDocument();
+                reg.setChassisNumber(request.documentNumber());
+                yield reg;
+            }
+            case TECHNICAL_VISIT -> {
+                TechnicalVisitDocument tv = new TechnicalVisitDocument();
+                tv.setInspectionCenter(request.documentNumber());
+                yield tv;
+            }
+        };
+
+        doc.setCompanyId(companyId);
+        doc.setVehicle(vehicle);
+        doc.setIssueDate(request.issueDate());
+        doc.setExpirationDate(request.expirationDate());
+
+        return mapDocToDTO(vehicleDocumentRepository.save(doc));
+    }
+
+    // ---- Maintenance Toggle ----
+
+    @Transactional
+    public VehicleResponseDTO toggleMaintenanceStatus(UUID vehicleId, boolean underMaintenance) {
+        UUID companyId = getCurrentCompanyId();
+        Vehicle vehicle = vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Véhicule introuvable"));
+        vehicle.setUnderMaintenance(underMaintenance);
+        return mapToResponseDTO(vehicleRepository.save(vehicle));
+    }
+
     /**
      * Package-accessible method used by MissionService to resolve a vehicle
-     * by ID within the correct tenant scope, without MissionService accessing
-     * VehicleRepository directly.
+     * by ID within the correct tenant scope.
      */
     public Vehicle resolveVehicle(UUID vehicleId, UUID companyId) {
         return vehicleRepository.findByIdAndCompanyId(vehicleId, companyId)
@@ -111,6 +169,16 @@ public class VehicleService {
                 vehicle.isUnderMaintenance(),
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt()
+        );
+    }
+
+    private DocumentResponseDTO mapDocToDTO(VehicleDocument doc) {
+        return new DocumentResponseDTO(
+                doc.getId(),
+                doc.getDocumentType() != null ? doc.getDocumentType().name() : doc.getClass().getSimpleName(),
+                doc.getDocumentReference(),
+                doc.getIssueDate(),
+                doc.getExpirationDate()
         );
     }
 }

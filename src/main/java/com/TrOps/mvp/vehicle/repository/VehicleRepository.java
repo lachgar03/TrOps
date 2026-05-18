@@ -13,5 +13,7 @@ import java.util.UUID;
 public interface VehicleRepository extends JpaRepository<Vehicle, UUID> {
     Optional<Vehicle> findByIdAndCompanyId(UUID id, UUID companyId);
     Page<Vehicle> findAllByCompanyId(UUID companyId, Pageable pageable);
+    long countByCompanyId(UUID companyId);
+    long countByCompanyIdAndIsUnderMaintenance(UUID companyId, boolean isUnderMaintenance);
 }
 
